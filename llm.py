@@ -6,14 +6,15 @@ Builds prompts, handles AI responses, runs tool dispatch loop.
 Model: metatron-qwen (fine-tuned from huihui_ai/qwen3.5-abliterated:9b)
 """
 
+import os
 import re
 import requests
 import json
 from tools import run_tool_by_command, run_nmap, run_curl_headers
 from search import handle_search_dispatch
 
-OLLAMA_URL  = "http://localhost:11434/api/generate"
-MODEL_NAME  = "metatron-qwen"
+OLLAMA_URL  = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+MODEL_NAME  = os.environ.get("OLLAMA_MODEL", "metatron-qwen")
 MAX_TOKENS  = 4096
 MAX_TOOL_LOOPS = 9   # max times AI can call tools per session
 OLLAMA_TIMEOUT = 600 

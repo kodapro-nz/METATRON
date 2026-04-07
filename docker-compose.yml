@@ -1,0 +1,79 @@
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-metatron_root}
+      MARIADB_DATABASE: ${METATRON_DB_NAME:-metatron}
+      MARIADB_USER: ${METATRON_DB_USER:-metatron}
+      MARIADB_PASSWORD: ${METATRON_DB_PASS:-123}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot init container: pulls the base model and creates metatron-qwen
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./Modelfile:/tmp/Modelfile:ro
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[*] Checking if metatron-qwen model exists..."
+        if ollama list | grep -q metatron-qwen; then
+          echo "[+] Model already exists, skipping."
+        else
+          echo "[*] Pulling base model (this may take a while on first run)..."
+          ollama pull huihui_ai/qwen3.5-abliterated:9b
+          echo "[*] Creating metatron-qwen from Modelfile..."
+          ollama create metatron-qwen -f /tmp/Modelfile
+          echo "[+] Model ready."
+        fi
+    restart: "no"
+
+  metatron:
+    build: .
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      METATRON_DB_HOST: mariadb
+      METATRON_DB_USER: ${METATRON_DB_USER:-metatron}
+      METATRON_DB_PASS: ${METATRON_DB_PASS:-123}
+      METATRON_DB_NAME: ${METATRON_DB_NAME:-metatron}
+      OLLAMA_URL: http://ollama:11434/api/generate
+      OLLAMA_MODEL: metatron-qwen
+    volumes:
+      - ./reports:/app/reports
+    stdin_open: true
+    tty: true
+    cap_add:
+      - NET_RAW   # needed for nmap SYN scans
+
+volumes:
+  mariadb_data:
+  ollama_data:
