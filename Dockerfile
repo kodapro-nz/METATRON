@@ -22,4 +22,9 @@ COPY . .
 # Reports directory
 RUN mkdir -p /app/reports
 
+# Run as non-root user
+RUN useradd -m -s /bin/bash metatron && \
+    chown -R metatron:metatron /app
+USER metatron
+
 CMD ["python", "metatron.py"]

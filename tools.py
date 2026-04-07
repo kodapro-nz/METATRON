@@ -6,6 +6,7 @@ Tools used: nmap, whois, whatweb, curl, dig, nikto
 OS: Parrot OS (all these tools are pre-installed or easily available)
 """
 
+import os
 import subprocess
 
 
@@ -189,19 +190,30 @@ def format_recon_for_llm(results: dict) -> str:
     return output
 
 
+# Allowlist of tool binaries the LLM is permitted to invoke
+ALLOWED_TOOLS = {"nmap", "whois", "whatweb", "curl", "dig", "nikto"}
+
+# Shell metacharacters that must never appear in arguments
+_SHELL_META = set(';|&`$(){}<>\n')
+
+
 def run_tool_by_command(command_str: str) -> str:
     """
     Called by LLM tool dispatch when AI writes [TOOL: nmap -sV 1.2.3.4].
-    Splits the string and runs it safely.
+    Only allowlisted recon tools may be executed.
     """
     parts = command_str.strip().split()
     if not parts:
         return "[!] Empty command."
 
-    # safety check — block destructive commands
-    blocked = ["rm", "dd", "mkfs", "shutdown", "reboot", "wget", "curl -o", "chmod"]
-    if parts[0] in blocked:
-        return f"[!] Blocked command: {parts[0]}"
+    tool = os.path.basename(parts[0])
+
+    if tool not in ALLOWED_TOOLS:
+        return f"[!] Tool not allowed: {tool}. Allowed: {', '.join(sorted(ALLOWED_TOOLS))}"
+
+    for arg in parts[1:]:
+        if any(c in arg for c in _SHELL_META):
+            return f"[!] Blocked shell metacharacter in argument: {arg}"
 
     return run_tool(parts)
 

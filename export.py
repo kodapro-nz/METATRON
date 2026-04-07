@@ -2,7 +2,11 @@
 
 import os
 import datetime
-import mysql.connector
+import html as _html
+import re as _re
+import unicodedata
+
+from db import db_connection
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
@@ -27,40 +31,44 @@ RISK_COLORS = {
 }
 
 
-def get_connection():
-    return mysql.connector.connect(
-        host="localhost",
-        user="metatron",
-        password="123",
-        database="metatron"
-    )
+def _esc(val) -> str:
+    """HTML-escape a value, converting None to '-'."""
+    if val is None:
+        return "-"
+    return _html.escape(str(val))
+
+
+def _safe_filename(name: str, max_len: int = 100) -> str:
+    """Sanitize a string for safe use as a filename component."""
+    name = _re.sub(r'^https?://', '', name)
+    name = unicodedata.normalize("NFKD", name)
+    name = _re.sub(r'[^a-zA-Z0-9._-]', '_', name)
+    name = _re.sub(r'_+', '_', name).strip('_')
+    return name[:max_len] if name else "unknown"
 
 
 def fetch_session(sl_no: int) -> dict:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM history WHERE sl_no = %s", (sl_no,))
-    history = c.fetchone()
-    c.execute("SELECT * FROM vulnerabilities WHERE sl_no = %s", (sl_no,))
-    vulns = c.fetchall()
-    c.execute("SELECT * FROM fixes WHERE sl_no = %s", (sl_no,))
-    fixes = c.fetchall()
-    c.execute("SELECT * FROM exploits_attempted WHERE sl_no = %s", (sl_no,))
-    exploits = c.fetchall()
-    c.execute("SELECT * FROM summary WHERE sl_no = %s", (sl_no,))
-    summary = c.fetchone()
-    conn.close()
-    return {"history": history, "vulns": vulns, "fixes": fixes,
-            "exploits": exploits, "summary": summary}
+    with db_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT * FROM history WHERE sl_no = %s", (sl_no,))
+        history = c.fetchone()
+        c.execute("SELECT * FROM vulnerabilities WHERE sl_no = %s", (sl_no,))
+        vulns = c.fetchall()
+        c.execute("SELECT * FROM fixes WHERE sl_no = %s", (sl_no,))
+        fixes = c.fetchall()
+        c.execute("SELECT * FROM exploits_attempted WHERE sl_no = %s", (sl_no,))
+        exploits = c.fetchall()
+        c.execute("SELECT * FROM summary WHERE sl_no = %s", (sl_no,))
+        summary = c.fetchone()
+        return {"history": history, "vulns": vulns, "fixes": fixes,
+                "exploits": exploits, "summary": summary}
 
 
 def fetch_all_history():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT sl_no, target, scan_date, status FROM history ORDER BY sl_no DESC")
-    rows = c.fetchall()
-    conn.close()
-    return rows
+    with db_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT sl_no, target, scan_date, status FROM history ORDER BY sl_no DESC")
+        return c.fetchall()
 
 
 def export_pdf(data: dict, output_dir: str) -> str:
@@ -72,7 +80,7 @@ def export_pdf(data: dict, output_dir: str) -> str:
     ai       = data["summary"][3] if data["summary"] else ""
 
     os.makedirs(output_dir, exist_ok=True)
-    safe = tgt.replace("https://","").replace("http://","").replace("/","_").replace(".","_")
+    safe = _safe_filename(tgt)
     filename = os.path.join(output_dir, f"metatron_SL{sl}_{safe}.pdf")
     doc      = SimpleDocTemplate(filename, pagesize=A4,
                                   topMargin=15*mm, bottomMargin=15*mm,
@@ -230,38 +238,38 @@ def export_html(data: dict, output_dir: str) -> str:
     rc   = RISK_COLORS.get(risk.upper(), "#7f8c8d")
 
     os.makedirs(output_dir, exist_ok=True)
-    safe = tgt.replace("https://","").replace("http://","").replace("/","_").replace(".","_")
+    safe = _safe_filename(tgt)
     filename = os.path.join(output_dir, f"metatron_SL{sl}_{safe}.html")
     vuln_rows = ""
     for v in data["vulns"]:
         sc = SEVERITY_COLORS.get((v[3] or "unknown").lower(), "#7f8c8d")
-        vuln_rows += (f"<tr><td>{v[0]}</td>"
-                      f"<td><strong>{v[2]}</strong><br><small>{v[6] or ''}</small></td>"
+        vuln_rows += (f"<tr><td>{_esc(v[0])}</td>"
+                      f"<td><strong>{_esc(v[2])}</strong><br><small>{_esc(v[6])}</small></td>"
                       f"<td><span style='color:{sc};font-weight:bold'>"
-                      f"{(v[3] or 'unknown').upper()}</span></td>"
-                      f"<td>{v[4] or '-'}</td><td>{v[5] or '-'}</td></tr>")
+                      f"{_esc((v[3] or 'unknown').upper())}</span></td>"
+                      f"<td>{_esc(v[4])}</td><td>{_esc(v[5])}</td></tr>")
 
     fix_rows = ""
     for f in data["fixes"]:
-        fix_rows += (f"<tr><td>{f[0]}</td><td>vuln #{f[2]}</td>"
-                     f"<td><code>{f[3] or '-'}</code></td>"
-                     f"<td>{f[4] or 'ai'}</td></tr>")
+        fix_rows += (f"<tr><td>{_esc(f[0])}</td><td>vuln #{_esc(f[2])}</td>"
+                     f"<td><code>{_esc(f[3])}</code></td>"
+                     f"<td>{_esc(f[4] or 'ai')}</td></tr>")
 
     exp_rows = ""
     for e in data["exploits"]:
-        exp_rows += (f"<tr><td>{e[0]}</td><td>{e[2] or '-'}</td>"
-                     f"<td>{e[3] or '-'}</td>"
-                     f"<td><code>{str(e[4] or '-')[:80]}</code></td>"
-                     f"<td>{e[5] or '-'}</td></tr>")
+        exp_rows += (f"<tr><td>{_esc(e[0])}</td><td>{_esc(e[2])}</td>"
+                     f"<td>{_esc(e[3])}</td>"
+                     f"<td><code>{_esc(str(e[4] or '-')[:80])}</code></td>"
+                     f"<td>{_esc(e[5])}</td></tr>")
 
-    ai_html = "".join(f"<p>{line}</p>"
+    ai_html = "".join(f"<p>{_esc(line)}</p>"
                       for line in str(ai).split("\n") if line.strip())
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Metatron Report — {tgt}</title>
+<title>Metatron Report — {_esc(tgt)}</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:'Segoe UI',sans-serif;background:#0d0d0d;color:#e0e0e0;padding:30px}}
@@ -303,19 +311,19 @@ a{{color:#555}}
 <div class="meta-grid">
   <div class="meta-card">
     <div class="label">Target</div>
-    <div class="value">{tgt}</div>
+    <div class="value">{_esc(tgt)}</div>
   </div>
   <div class="meta-card">
     <div class="label">Session</div>
-    <div class="value">SL# {sl}</div>
+    <div class="value">SL# {_esc(sl)}</div>
   </div>
   <div class="meta-card">
     <div class="label">Scan Date</div>
-    <div class="value">{date}</div>
+    <div class="value">{_esc(date)}</div>
   </div>
   <div class="meta-card">
     <div class="label">Risk Level</div>
-    <div class="value risk">{risk}</div>
+    <div class="value risk">{_esc(risk)}</div>
   </div>
 </div>
 
