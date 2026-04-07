@@ -1,6 +1,8 @@
 services:
   mariadb:
     image: mariadb:11
+    ports:
+      - "3306:3306"
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-metatron_root}
       MARIADB_DATABASE: ${METATRON_DB_NAME:-metatron}
@@ -17,6 +19,8 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -51,6 +55,7 @@ services:
         fi
     restart: "no"
 
+  # Default profile: bridge network (works for remote/internet targets)
   metatron:
     build: .
     depends_on:
@@ -73,6 +78,32 @@ services:
     tty: true
     cap_add:
       - NET_RAW   # needed for nmap SYN scans
+
+  # LAN profile: host network (use this to scan local network targets)
+  # Usage: docker compose run --rm metatron-lan python metatron.py
+  metatron-lan:
+    build: .
+    network_mode: host
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      METATRON_DB_HOST: 127.0.0.1
+      METATRON_DB_USER: ${METATRON_DB_USER:-metatron}
+      METATRON_DB_PASS: ${METATRON_DB_PASS:-123}
+      METATRON_DB_NAME: ${METATRON_DB_NAME:-metatron}
+      OLLAMA_URL: http://127.0.0.1:11434/api/generate
+      OLLAMA_MODEL: metatron-qwen
+    volumes:
+      - ./reports:/app/reports
+    stdin_open: true
+    tty: true
+    profiles:
+      - lan
 
 volumes:
   mariadb_data:

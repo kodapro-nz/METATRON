@@ -114,6 +114,14 @@ That's it — database, AI model, and all tools are running inside Docker.
 | `docker compose down` | Stop all services |
 | `docker compose down -v` | Stop and delete all data (DB + model) |
 
+**Scanning LAN targets (e.g. 192.168.x.x):**
+
+By default, Docker isolates the container from your local network. To scan hosts on your LAN, use the `lan` profile which gives Metatron direct access to your host's network:
+
+```bash
+docker compose --profile lan run --rm metatron-lan python metatron.py
+```
+
 **Notes:**
 - Scan history and AI model are stored in Docker volumes and persist across restarts
 - Exported reports are saved to `./reports/` on your host machine
