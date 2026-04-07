@@ -1,13 +1,21 @@
 FROM python:3.11-slim
 
-# Install system recon tools and MariaDB client
+# Install system recon tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap \
     whois \
-    whatweb \
     curl \
     dnsutils \
-    nikto \
+    git \
+    perl \
+    libnet-ssleay-perl \
+    ruby \
+    && git clone --depth 1 https://github.com/urbanadventurer/WhatWeb.git /opt/whatweb \
+    && ln -s /opt/whatweb/whatweb /usr/local/bin/whatweb \
+    && git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto \
+    && ln -s /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
+    && apt-get purge -y git \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
