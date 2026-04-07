@@ -82,6 +82,50 @@ Metatron allows you to export scan results into clean, shareable report formats 
 
 ## ⚙️ Installation
 
+### 🐳 Option A — Docker (Recommended)
+
+The fastest way to get started. Docker handles MariaDB, Ollama, the AI model, and all recon tools automatically.
+
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed.
+
+```bash
+git clone https://github.com/sooryathejas/METATRON.git
+cd METATRON
+docker compose up -d
+```
+
+> ⏳ **First run** will take a few minutes — it downloads the AI model (~5 GB) and sets up MariaDB. Subsequent starts are instant.
+
+Once the services are ready, launch Metatron:
+
+```bash
+docker compose exec metatron python metatron.py
+```
+
+That's it — database, AI model, and all tools are running inside Docker.
+
+**Useful commands:**
+
+| Command | Description |
+|---------|-------------|
+| `docker compose up -d` | Start all services in the background |
+| `docker compose exec metatron python metatron.py` | Launch Metatron CLI |
+| `docker compose logs -f ollama-init` | Watch AI model download progress |
+| `docker compose down` | Stop all services |
+| `docker compose down -v` | Stop and delete all data (DB + model) |
+
+**Notes:**
+- Scan history and AI model are stored in Docker volumes and persist across restarts
+- Exported reports are saved to `./reports/` on your host machine
+- To customize credentials, copy `.env.example` to `.env` and edit it
+- GPU acceleration: if you have an NVIDIA GPU, add `deploy.resources.reservations.devices` to the `ollama` service in `docker-compose.yml`
+
+---
+
+### 🔧 Option B — Manual Install (Parrot OS / Debian)
+
+If you prefer not to use Docker, follow the steps below.
+
 ### 1. Clone the repository
 
 ```bash
@@ -300,17 +344,23 @@ or
 
 ```
 METATRON/
-├── metatron.py       ← main CLI entry point
-├── db.py             ← MariaDB connection and all CRUD operations
-├── tools.py          ← recon tool runners (nmap, whois, etc.)
-├── llm.py            ← Ollama interface and AI tool dispatch loop
-├── search.py         ← DuckDuckGo web search and CVE lookup
-├── Modelfile         ← custom model config for metatron-qwen
-├── requirements.txt  ← Python dependencies
-├── .gitignore        ← excludes venv, pycache, db files
-├── LICENSE           ← MIT License
-├── README.md         ← this file
-└── screenshots/      ← terminal screenshots for documentation
+├── metatron.py          ← main CLI entry point
+├── db.py                ← MariaDB connection and all CRUD operations
+├── tools.py             ← recon tool runners (nmap, whois, etc.)
+├── llm.py               ← Ollama interface and AI tool dispatch loop
+├── search.py            ← DuckDuckGo web search and CVE lookup
+├── export.py            ← PDF and HTML report generation
+├── Modelfile            ← custom model config for metatron-qwen
+├── requirements.txt     ← Python dependencies
+├── Dockerfile           ← Docker image (Python + recon tools)
+├── docker-compose.yml   ← orchestrates app + MariaDB + Ollama
+├── init.sql             ← auto-creates DB schema on first run
+├── .env.example         ← template for Docker environment variables
+├── .dockerignore        ← files excluded from Docker build
+├── .gitignore           ← excludes venv, pycache, db files
+├── LICENSE              ← MIT License
+├── README.md            ← this file
+└── screenshots/         ← terminal screenshots for documentation
 ```
 
 ---
